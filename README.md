@@ -1,3 +1,4 @@
+# [UNDER CONSTRUCTION]
 # Introduction
   In neutral atom experiments, many experimental system parameters often can not be analytically modeled well enough to simulate the resulting atom dynamics and predict optimal control sequences (for example, the optimal pulse profile to prepare an atom in state |1> given laser noise, drifting parameters, etc.). In an attempt to solve this problem, this repository implements Variational AutoEncoder (VAE) Quantum Optimizer for use in real-time quantum experiments involving neutral atoms. It draws from the latent space of a VAE to attempt to optimize a discretely-sampled series of parameters to achieve a desired outcome. 
  

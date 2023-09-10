@@ -11,7 +11,7 @@ from scipy.optimize import minimize
 input
 
 
-np.random.seed(5)
+np.random.seed(1)
 
 def decode_latent_space(latent_variables, vae):
     latent_variables_tensor = tf.convert_to_tensor([latent_variables], dtype=tf.float32)
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
 
-    for i in range (20):
+    for i in range (200):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
