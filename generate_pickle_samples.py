@@ -2,18 +2,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tensorflow import keras
 import tensorflow as tf
-from VAE_generator import VAEDataGeneratorKeras
+from data_generator import VAEDataGeneratorKeras
 import platform
 import sys
 import pickle
-from VAEGO_keras import VAE
+from VAE_optimizer_architecture import VAE
+
+"""Code to generate a pickle file that contains samples and the associated populations
+    """
 
 
 
 if __name__ == '__main__':
     from multiprocessing import Manager
     
-    total_train_samples = 512*2000
+    total_train_samples = 16#512*2000
     batch_size = 64
     number_epochs = 1
     input_size = 64
@@ -33,7 +36,6 @@ if __name__ == '__main__':
     
     print(f"Python Platform: {platform.platform()}")
     print(f"Tensor Flow Version: {tf.__version__}")
-    print(f"Keras Version: {keras.__version__}")
     print()
     print(f"Python {sys.version}")
     gpu = len(tf.config.list_physical_devices('GPU'))>0
@@ -49,9 +51,7 @@ if __name__ == '__main__':
 
     vae.vae_model.fit(training_generator,
             batch_size=batch_size,
-            epochs=number_epochs)#,
-            # use_multiprocessing=True,
-            # workers=8)
+            epochs=number_epochs)
     
 
     shared_data_array = np.array(list(shared_data_list))
@@ -59,11 +59,13 @@ if __name__ == '__main__':
     print(shared_data_array.shape)
     reconstruction_train = shared_data_array[:, :-1]
     cost_train = shared_data_array[:, -1]
-    print("Mean cost is: {:.4f}".format(np.mean(cost_train)))
-    with open('data_v3.pkl', 'wb') as file:
+    print("Mean population in |1> is: {:.4f}".format(np.mean(cost_train)))
+    with open('data_v0.pkl', 'wb') as file:
         pickle.dump(shared_data_array, file)
 
     plt.figure(figsize=(12, 8))
+    
+    show_NN_predictions = False
 
     for i in range(10):
         plt.subplot(5, 2, i+1)
@@ -72,7 +74,10 @@ if __name__ == '__main__':
         reconstruction = pred_y[0]
         x = np.linspace(0, validation_generator.max_time, len(train_data))
         plt.plot(x, train_data[i])
-        plt.scatter(x, reconstruction[i])
+        if show_NN_predictions:
+            plt.scatter(x, reconstruction[i])
     
+    # plt.xlabel("Time (arb.)")
+    # plt.ylabel("Drive Amplitude (Arb.)")
     plt.tight_layout()
     plt.show()

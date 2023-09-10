@@ -2,15 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tensorflow import keras
 import tensorflow as tf
-from VAE_generator import VAEDataGeneratorKeras
+from data_generator import VAEDataGeneratorKeras
 import platform
 import sys
-import tempfile
 import pickle
-from VAEGO_keras import VAE, BetaScheduler, CostScheduler
+from VAE_optimizer_architecture import VAE, BetaScheduler, PredictorScheduler
 
 
-np.random.seed(69)
+np.random.seed(55)
 
 
 
@@ -31,21 +30,20 @@ if __name__ == '__main__':
             pickle_data = pickle.load(file)
             print(pickle_data.shape)
             reconstruction_train = pickle_data[:len(pickle_data), :-1]
-            cost_train = pickle_data[:len(pickle_data), -1]
+            population_train = pickle_data[:len(pickle_data), -1]
     else:
         # Create a manager and a shared list
         manager = Manager()
         shared_data_list = manager.list()
         # create generators that make artificial data and run them through the qutip hamiltonian
         training_generator = VAEDataGeneratorKeras(array_size=input_size, num_samples=total_train_samples, batch_size=batch_size, shared_data_list=shared_data_list)#, load_pickled="test_data_v0.pkl")
-        training_generator.get_cost_value = True
+        training_generator.get_population_value = True
 
     validation_generator = VAEDataGeneratorKeras(array_size=input_size, num_samples=512, batch_size=batch_size)
-    validation_generator.get_cost_value = True
+    validation_generator.get_population_value = True
     
     print(f"Python Platform: {platform.platform()}")
     print(f"Tensor Flow Version: {tf.__version__}")
-    print(f"Keras Version: {keras.__version__}")
     print()
     print(f"Python {sys.version}")
     gpu = len(tf.config.list_physical_devices('GPU'))>0
@@ -56,15 +54,15 @@ if __name__ == '__main__':
     vae.decoder.summary()    
 
     beta_scheduler = BetaScheduler(start_beta=0, end_beta=1e-3, turn_on_step=batch_size)
-    cost_scheduler = CostScheduler(total_steps=total_train_samples//batch_size)
+    predictor_scheduler = PredictorScheduler(total_steps=total_train_samples//batch_size)
     lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, batch_size*batch_size, 1e-5)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
-    vae.set_non_trainable_layers(['cost_network'])
+    vae.set_non_trainable_layers(['population_predictor_network'])
     vae.vae_model.compile(optimizer)
     vae.vae_model.summary()
 
 
-    vae.vae_model.fit(x=[reconstruction_train, cost_train],
+    vae.vae_model.fit(x=[reconstruction_train, population_train],
             y=reconstruction_train,
             validation_data=validation_generator,
             batch_size=batch_size,
@@ -73,7 +71,7 @@ if __name__ == '__main__':
             workers=10,
             callbacks=[beta_scheduler])
             
-    vae.vae_model.save_weights("VAEGO_no_cost.h5")
+    vae.vae_model.save_weights("VAEGO_no_population.h5")
     
     
     if not use_saved:
@@ -85,8 +83,8 @@ if __name__ == '__main__':
 
     for i in range(8):
         plt.subplot(4, 2, i+1)
-        train_data, cost_data = validation_generator.generate_data()
-        pred_y = vae.vae_model.predict([train_data, cost_data])
+        train_data, population_data = validation_generator.generate_data()
+        pred_y = vae.vae_model.predict([train_data, population_data])
         reconstruction = pred_y[0]
         x = np.linspace(0, validation_generator.max_time, len(train_data))
         plt.plot(x, train_data[i])

@@ -9,14 +9,10 @@ from tensorflow.keras.regularizers import l2
 from keras.callbacks import Callback
 from tensorflow.nn import gelu
 import tensorflow as tf
-from VAE_generator import VAEDataGeneratorKeras
-import platform
-import sys
-import tempfile
-import pickle
 
 
-np.random.seed(69)
+
+np.random.seed(42)
 
 
 
@@ -48,7 +44,7 @@ class VAE:
 
         self.encoder = self.create_encoder()
         self.decoder = self.create_decoder()
-        self.cost_network = self.create_cost_network()
+        self.population_predictor_network = self.create_population_predictor_network()
 
         self.vae_model = self.create_vae()
 
@@ -80,20 +76,20 @@ class VAE:
         
         return Model(inputs, x, name = 'decoder')
     
-    def create_cost_network(self):
+    def create_population_predictor_network(self):
         inputs = Input(shape=(self.latent_dim,))
-        y_loss = Dense(128, activation=gelu, name='cost_dense1')(inputs)
+        y_loss = Dense(128, activation=gelu, name='population_predictor_dense1')(inputs)
         y_loss = Dropout(.3)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(64, activation=gelu, name='cost_dense2')(y_loss)
+        y_loss = Dense(64, activation=gelu, name='population_predictor_dense2')(y_loss)
         y_loss = Dropout(.3)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(32, activation=gelu, name='cost_dense3')(y_loss)
+        y_loss = Dense(32, activation=gelu, name='population_predictor_dense3')(y_loss)
         y_loss = Dropout(.3)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(1, activation='sigmoid', name='cost_activation')(y_loss)
+        y_loss = Dense(1, activation='sigmoid', name='population_predictor_activation')(y_loss)
         
-        return  Model(inputs, y_loss, name='cost_network')
+        return  Model(inputs, y_loss, name='population_predictor_network')
     
 
     def create_vae(self):
@@ -102,9 +98,9 @@ class VAE:
         mean, log_var = self.encoder(inputs)
         z = Sampling()([mean, log_var])
         y_pred = self.decoder(z)
-        y_cost = self.cost_network(z)
+        y_population_predictor = self.population_predictor_network(z)
         
-        y_final = VAELossLayer(name='vae_loss_layer', beta=self.beta)([inputs, y_true, [y_pred, y_cost], mean, log_var, self.cost_network])
+        y_final = VAELossLayer(name='vae_loss_layer', beta=self.beta)([inputs, y_true, [y_pred, y_population_predictor], mean, log_var, self.population_predictor_network])
         model = Model([inputs, y_true], y_final)
         self.vae_model = model
         return model
@@ -145,27 +141,27 @@ class VAELossLayer(layers.Layer):
         self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(1e-3), trainable=False)
 
     def call(self, inputs):
-        reconstruction_true, cost_true, y_pred, z_mean, z_log_var, cost_network = inputs
+        reconstruction_true, population_predictor_true, y_pred, z_mean, z_log_var, population_predictor_network = inputs
         
         reconstruction = y_pred[0]
-        cost = y_pred[1]
+        population_predictor = y_pred[1]
         reconstruction_loss = tf.reduce_mean(tf.square(reconstruction_true - reconstruction), axis=[1, 2]) 
         kl_loss = -0.5 * tf.reduce_sum(1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var), axis=1) 
-        cost_loss = tf.square(cost_true - cost) * self.gamma 
+        population_predictor_loss = tf.square(population_predictor_true - population_predictor) * self.gamma 
         
         # Calculate the L2 regularization term
 
         l2_loss = 0
-        for layer_name in ['cost_dense1', 'cost_dense2', 'cost_dense3']:
-            layer = cost_network.get_layer(name=layer_name)
+        for layer_name in ['population_predictor_dense1', 'population_predictor_dense2', 'population_predictor_dense3']:
+            layer = population_predictor_network.get_layer(name=layer_name)
             weights = layer.kernel  # Get the kernel weights
             l2_loss += self.reg * tf.reduce_sum(tf.square(weights))
         
-        loss = reconstruction_loss * self.alpha + kl_loss* self.beta  + cost_loss + l2_loss
+        loss = reconstruction_loss * self.alpha + kl_loss* self.beta  + population_predictor_loss + l2_loss
         self.add_loss(loss, inputs=inputs)
         self.add_metric(reconstruction_loss, name='reconstruction_loss', aggregation='mean')
         self.add_metric(kl_loss, name='kl_loss', aggregation='mean')
-        self.add_metric(cost_loss, name='cost_loss', aggregation='mean')
+        self.add_metric(population_predictor_loss, name='population_predictor_loss', aggregation='mean')
         self.add_metric(l2_loss, name='l2_loss', aggregation='mean')
         return y_pred  # Return y_pred as output for convenience
 
@@ -186,17 +182,17 @@ class BetaScheduler(Callback):
         K.set_value(self.model.get_layer('vae_loss_layer').beta, beta_value)
         self.step += 1
         
-class CostScheduler(Callback):
+class PredictorScheduler(Callback):
     def __init__(self, total_steps):
-        super(CostScheduler, self).__init__()
+        super(PredictorScheduler, self).__init__()
 
         self.total_steps = total_steps
         self.step = 0
 
     def on_train_batch_end(self, batch, logs=None):
         if self.step > self.total_steps/2:
-            train_cost = 1
-            K.set_value(self.model.get_layer('vae_loss_layer').train_cost, train_cost)
+            train_population_predictor = 1
+            K.set_value(self.model.get_layer('vae_loss_layer').train_population_predictor, train_population_predictor)
         self.step += 1
 
 

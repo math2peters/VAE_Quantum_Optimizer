@@ -1,39 +1,27 @@
 import numpy as np
-from scipy.special import jv, airy
-import matplotlib.pyplot as plt
 from keras.utils import Sequence
 from scipy.ndimage import gaussian_filter1d
 import qutip
 import numpy as np
 import scipy.interpolate as interpolate
-import matplotlib
-import matplotlib.pylab as plt
 from qutip import basis, mesolve, destroy
-from torch.utils.data import Dataset
-import torch
-import pickle
-from qutip import mesolve, Options
 
 
 # random functions used to train the model
 def gaussian(t, t0, A, sigma, C):
     out = A*np.exp(-(t-t0)**2/(2*sigma**2)) + C
-    # out /= np.max(abs(out))
     return out
 
 def sinc(t, t0, A, w, C):
     out = A*np.sin(w*(t-t0))/(w*(t-t0)) + C
-    # out /= np.max(out)
     return out
 
 def sin(t, t0, A, w, C):
     out = A*np.sin(w*(t-t0)) + C
-    # out /= np.max(out)
     return out
 
 def exp(t, t0, A, a):
     out = A*np.exp(-a*(t-t0))
-    # out /= np.max(out)
     return out
 
 def noise(t, correlation_length, filter_size, C, **kwargs):
@@ -63,11 +51,11 @@ class VAEDataGeneratorKeras(Sequence):
         self.max_time = 1 # max time in the simulation
         self.t_list = np.linspace(0,self.max_time, array_size) # list of times for the simulation
         self.t_list_scale = 5
-        self.best_cost = 0
+        self.best_population = 0
         self.output_scale = 2 # scale the output of the NN before running through qutip
         self.data_list = []
-        self.cost_list = []
-        self.get_cost_value = True
+        self.population_list = []
+        self.get_population_value = True
         self.save_data = save_data
     
 
@@ -94,7 +82,7 @@ class VAEDataGeneratorKeras(Sequence):
         random_array = np.random.randint(0, 18, size=self.batch_size)
         
         training_list = []
-        cost_list = []
+        population_list = []
         
         for integer in random_array:
             C = (np.random.random_sample(5)-.5)*2
@@ -108,6 +96,7 @@ class VAEDataGeneratorKeras(Sequence):
             
             combo_val = np.random.random_sample()
             
+            # generate a random integer and then based on that make a random (but smooth) function
             if  integer == 0:
                 data = gaussian(self.t_list, t0[0], A[0], sigma[0], C[0])
                 
@@ -207,18 +196,18 @@ class VAEDataGeneratorKeras(Sequence):
                     data = np.clip(data, (max(data)-min(data))*np.random.random_sample()*.2+min(data), max(data))
               
             training_list.append(data)
-            if self.get_cost_value:
-                cost = self.get_cost(data)
+            if self.get_population_value:
+                population = self.get_population(data)
             else:
-                cost = -1
-            cost_list.append(cost)
+                population = -1
+            population_list.append(population)
 
         
         self.data_list.append(data)
-        self.cost_list.append(cost)
-        return np.array(training_list), np.array(cost_list)
+        self.population_list.append(population)
+        return np.array(training_list), np.array(population_list)
             
-    def get_cost(self, function_vals, return_full_values=False):
+    def get_population(self, function_vals, return_full_values=False):
         # make a qutip hamiltonian and see how the function evolves the population in |1>
 
         # have to interpolate to make mesolve happy
@@ -246,180 +235,7 @@ class VAEDataGeneratorKeras(Sequence):
         else:
             return result
         
-        # # two level hamiltonian. H1 is multipled by the function vals at each time step
-        # H0 = qutip.Qobj([[0, 0.0, 0.0], [0.0, 1, 0.0], [0.0, 0.0, .5]])
-        # H1 = qutip.Qobj([[0, 1, 0.0], [1, 0, 0.0], [0.0, 0.0, 0]])
-
-        # H = [H0, [H1, g]]
-
-        # psi0 = basis(3, 0)
-        # proj1 = qutip.ket2dm(qutip.ket("1"))
-        # # solve the hamiltonian for the times given in t_list, there is a collapse operator that causes damping from |1> to |0>
-        # result = mesolve(H, psi0,self.t_list,[destroy(2)*np.sqrt(.25)], e_ops=[proj1]) 
-
-                
 
     def on_epoch_end(self):
         pass
     
-# class VAEDataGenerator(Dataset):
-#     def __init__(self, array_size, num_samples, batch_size):
-#         # Initialization logic remains largely the same
-#         self.num_samples = num_samples
-#         self.batch_size = batch_size
-#         self.array_size = array_size
-#         self.max_time = 1
-#         self.t_list = np.linspace(0, self.max_time, array_size)
-#         self.best_cost = 0
-#         self.output_scale = 2
-#         self.data_list = []
-#         self.cost_list = []
-
-#     def __len__(self):
-#         return int(np.ceil(self.num_samples / self.batch_size))
-
-#     def __getitem__(self, idx):
-#         batch_data, target_data = self.generate_data()
-#         weights = target_data
-#         weights = np.clip(weights, 0.25, 1)
-#         #print(torch.tensor(batch_data, dtype=torch.float).shape)
-#         return torch.tensor(batch_data, dtype=torch.float), torch.tensor(batch_data, dtype=torch.float) #, torch.tensor(weights, dtype=torch.float)
-    
-#     # def __iter__(self):
-
-#     #     batch_data, target_data = self.generate_data()
-#     #     weights = target_data
-#     #     weights = np.clip(weights, 0.25, 1)
-#     #     #print(torch.tensor(batch_data, dtype=torch.float).shape)
-#     #     return torch.tensor(batch_data, dtype=torch.float), torch.tensor(batch_data, dtype=torch.float) #, torch.tensor(weights, dtype=torch.float)
-
-#     def generate_data(self):
-#         # generate a random array of integers to determine which function to use
-#         random_array = np.random.randint(0, 10, size=self.batch_size)
-        
-#         training_list = []
-#         cost_list = []
-
-#         for integer in random_array:
-#             C = (np.random.random_sample()-.5)
-#             t0 = np.random.random_sample()*self.max_time
-#             A = np.random.random_sample()
-#             sigma = np.random.random_sample()*self.max_time*2
-#             w = np.random.random_sample()*self.max_time*4
-#             m = (np.random.random_sample()-.5)*3
-#             C = (np.random.random_sample()-.5)
-#             combo_val = np.random.random_sample()
-            
-#             if  integer == 0:
-#                 data = gaussian(self.t_list, t0, A, sigma, C)
-                
-#             if integer == 1:
-#                 data = sinc(self.t_list, t0, A, w, C)
-                
-#             if integer == 2:
-#                 data = sin(self.t_list, t0, A, w, C)
-                
-#             if integer == 3:
-#                 data = linear(self.t_list, m, C)
-                
-#             if integer == 4:
-#                 data1 = sinc(self.t_list, t0, A, w, C)
-#                 data2 = gaussian(self.t_list, t0, A, sigma, C)
-#                 data = data1*combo_val + data2*(1-combo_val)
-                
-#             if integer == 5:
-#                 data1 = sin(self.t_list, t0, A, w, C)
-#                 data2 = gaussian(self.t_list, t0, A, sigma, C)
-#                 data = data1*combo_val + data2*(1-combo_val)
-                
-#             if integer == 6:
-#                 data1 = linear(self.t_list, m, C)
-#                 data2 = gaussian(self.t_list, t0, A, sigma, C)
-#                 data = data1*combo_val + data2*(1-combo_val)
-                
-            
-#             if integer == 7:
-#                 data1 = sin(self.t_list, t0, A, w, C)
-#                 data2 = linear(self.t_list, m, C)
-#                 data = data1*combo_val + data2*(1-combo_val)
-                
-#             if integer == 8:
-#                 data1 = sinc(self.t_list, t0, A, w, C)
-#                 data2 = gaussian(self.t_list, t0, A, sigma, C)
-#                 data3 = linear(self.t_list, m, C)
-#                 data = data1*combo_val/2 + data2*(1-combo_val)/2 + data3/2
-                
-#             if integer == 9:
-#                 data1 = sin(self.t_list, t0, A, w, C)
-#                 data2 = sinc(self.t_list, t0, A, w, C)
-#                 data = data1*combo_val + data2*(1-combo_val)
-            
-                
-            
-            
-#             # if integer == 0:
-#             #     while cost < .4 :
-#             #         t0 = random.uniform(0, self.max_time)
-#             #         A = random.uniform(-1, -1)
-#             #         sigma = random.uniform(0.1, self.max_time/2)
-#             #         C = random.uniform(-1, 1)
-#             #         data = gaussian(self.t_list, t0, A, sigma, C)
-#             #         data = np.clip(data, -1, 1)
-#             #         cost = self.get_cost(data)
-#             #data=self.t_list
-#             # clip the data to be between -1 and 1 (we'll eventually scale the gan generator output to be between -1 and 1)
-#             data = np.clip(data, -1, 1)        
-#             training_list.append(data)
-#             cost = self.get_cost(data)
-#             cost_list.append(cost)
-        
-#             # if cost > self.best_cost:
-#             #     self.best_cost = cost
-#             #     #print("\nNew best cost: ", self.best_cost)
-#             #     self.best_data = data
-                
-        
-#         # self.data_list.append(data)
-#         # self.cost_list.append(cost)
-#         return np.array(training_list), np.array(cost_list)
-
-#     def get_cost(self, function_vals, return_full_values=False):
-#         # make a qutip hamiltonian and see how the function evolves the population in |1>
-
-#         # have to interpolate to make mesolve happy
-#         f = interpolate.interp1d(self.t_list, function_vals*self.output_scale, fill_value="extrapolate")
-#         g = lambda t, args: f(t)
-        
-#         # two level hamiltonian. H1 is multipled by the function vals at each time step
-#         H0 = -0.5 * 1 * qutip.operators.sigmaz()
-#         H1 = qutip.operators.sigmax()
-
-#         H = [H0, [H1, g]]
-
-#         psi0 = basis(2, 0)
-#         proj1 = qutip.ket2dm(qutip.ket("1"))
-#         # solve the hamiltonian for the times given in t_list, there is a collapse operator that causes damping from |1> to |0>
-#         result = mesolve(H, psi0,self.t_list,[destroy(2)*np.sqrt(.25)], e_ops=[proj1]) 
-
-#         if not return_full_values:
-#             return result.expect[0][-1]
-#         else:
-#             return result
-
-
-
-
-#     def generate_pickle(self, file_name):
-    
-#         x_train_list = []
-#         y_train_list = []
-#         for i in range(self.num_samples):
-#             if i % 100 == 0:
-#                 print("At {} of {}".print(i, self.num_samples))
-#             x_train, y_train = self.generate_data()
-#             x_train_list.append(x_train)
-#             y_train_list.append(y_train)
-        
-#         with open(file_name, 'wb') as file:
-#             # Use pickle.dump() to save the data to the file
-#             pickle.dump([x_train_list, y_train_list], file)
