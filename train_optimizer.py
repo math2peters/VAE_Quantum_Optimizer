@@ -11,7 +11,7 @@ from scipy.optimize import minimize
 input
 
 
-np.random.seed(1)
+np.random.seed(5)
 
 def decode_latent_space(latent_variables, vae):
     latent_variables_tensor = tf.convert_to_tensor([latent_variables], dtype=tf.float32)
@@ -116,7 +116,7 @@ if __name__ == '__main__':
     # vae.encoder.summary()
     # vae.decoder.summary()    
 
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, batch_size*batch_size, 1e-5)
+    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 10, .93)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
 
     vae.vae_model.compile(optimizer)
@@ -130,7 +130,9 @@ if __name__ == '__main__':
     
     print("Max fed population is {:.4f}".format(max(low_population_train)))
     print("Avg fed population is {:.4f}".format(np.mean(low_population_train)))
-    print("Number of samples with populations > 0.225: {:.6f}".format(len(np.where(population_train > .225)[0])/len(population_train)))
+    print("Number of VAE-trained samples with populations > 0.250: {:.6f}".format(len(np.where(population_train > .25)[0])/len(population_train)))
+    print("Number of VAE-trained samples with populations > 0.225: {:.6f}".format(len(np.where(population_train > .225)[0])/len(population_train)))
+    print("Number of VAE-trained samples with populations > 0.200: {:.6f}".format(len(np.where(population_train > .200)[0])/len(population_train)))
 
     
     vae.vae_model.load_weights("VAEGO_no_population.h5")
@@ -139,17 +141,17 @@ if __name__ == '__main__':
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
     vae.set_trainable_layers(['population_predictor_network'])
     
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, batch_size, .9)
+    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 10, .95)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
     
     
     vae.vae_model.compile(optimizer)
     vae.vae_model.fit(x=[low_reconstruction_train, low_population_train],
             y=low_reconstruction_train,
-            sample_weight=1/(1-np.array(low_population_train))**6,
+            sample_weight=np.clip(1/(1-np.array(low_population_train))**10, 1, 25),
             validation_data=validation_generator,
             steps_per_epoch=1,
-            epochs=8,
+            epochs=10,
             use_multiprocessing=False)
     
         
@@ -163,7 +165,7 @@ if __name__ == '__main__':
     vae.vae_model.get_layer('vae_loss_layer').alpha = 1
     vae.vae_model.set_trainable = True
     
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(5e-3, 1, .9)
+    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-3, 10, .95)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
     vae.vae_model.compile(optimizer)
     
@@ -172,7 +174,7 @@ if __name__ == '__main__':
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
 
-    for i in range (30):
+    for i in range (20):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
@@ -185,7 +187,7 @@ if __name__ == '__main__':
 
         vae.vae_model.fit(x=[np.array(reconstruction_list), np.array(population_list)],
                 y=np.array(reconstruction_list),
-                sample_weight=1/(1-np.array(population_list))**6,
+                sample_weight=np.clip(1/(1-np.array(population_list))**6, 1, 25),
                 steps_per_epoch=1,
                 epochs=1,
                 verbose=0)
