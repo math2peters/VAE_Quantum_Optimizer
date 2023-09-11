@@ -4,7 +4,7 @@ from scipy.ndimage import gaussian_filter1d
 import qutip
 import numpy as np
 import scipy.interpolate as interpolate
-from qutip import basis, mesolve, destroy
+from qutip import basis, mesolve, destroy, Options
 
 
 # random functions used to train the model
@@ -224,7 +224,11 @@ class VAEDataGeneratorKeras(Sequence):
         proj1 = qutip.ket2dm(qutip.ket("1"))
         # solve the hamiltonian for the times given in t_list, there is a collapse operator that causes damping from |1> to |0>
         try:
-            result = mesolve(H, psi0,self.t_list,[destroy(2)*np.sqrt(6)], e_ops=[proj1]) 
+            options = Options()
+            options.num_cpus = 8
+            options.atol = 1e-10
+            options.nsteps = 10000
+            result = mesolve(H, psi0,self.t_list,[destroy(2)*np.sqrt(6)], e_ops=[proj1], options=options) 
         except Exception as e:
             error_message = f"An error occurred during the mesolve operation: {str(e)}"
             print(error_message)

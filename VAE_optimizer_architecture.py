@@ -11,11 +11,6 @@ from tensorflow.nn import gelu
 import tensorflow as tf
 
 
-
-np.random.seed(42)
-
-
-
 def reflection_padding_1d(padding):
     """
     Apply reflection padding to a 1D input tensor.
@@ -138,7 +133,7 @@ class VAELossLayer(layers.Layer):
         self.beta = self.add_weight(name='beta', shape=(), initializer=tf.keras.initializers.Constant(beta), trainable=False)
         self.alpha = self.add_weight(name='alpha', shape=(), initializer=tf.keras.initializers.Constant(1), trainable=False)
         self.gamma = self.add_weight(name='gamma', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
-        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(1e-3), trainable=False)
+        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
 
     def call(self, inputs):
         reconstruction_true, population_predictor_true, y_pred, z_mean, z_log_var, population_predictor_network = inputs
