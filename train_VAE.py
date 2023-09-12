@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     beta_scheduler = BetaScheduler(start_beta=0, end_beta=1e-3, turn_on_step=batch_size)
     predictor_scheduler = PredictorScheduler(total_steps=total_train_samples//batch_size)
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(2e-2, batch_size, .9825)
+    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, batch_size, .9825)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
     vae.set_non_trainable_layers(['population_predictor_network'])
     vae.vae_model.compile(optimizer)

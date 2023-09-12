@@ -11,7 +11,6 @@ from scipy.optimize import minimize
 
 
 np.random.seed(0)
-tf.random.set_seed(0)
 
 def decode_latent_space(latent_variables, vae):
     latent_variables_tensor = tf.convert_to_tensor([latent_variables], dtype=tf.float32)
@@ -41,7 +40,7 @@ def get_latent_mean_var(input_array, vae):
 
 def population_prediction_function(latent_variables, vae):
     latent_variables = np.array([latent_variables])  # Ensure the shape is compatible
-    return np.float64(vae.population_predictor_network.predict(latent_variables, verbose=0)[0][0])
+    return vae.population_predictor_network.predict(latent_variables, verbose=0)[0][0]
 
 def population_prediction_function_with_gradient(latent_variables, vae, with_penalty=False, found_minima=[], penalty_scaling=1):
     latent_variables_tensor = tf.Variable([latent_variables], dtype=tf.float32)
@@ -51,20 +50,30 @@ def population_prediction_function_with_gradient(latent_variables, vae, with_pen
     population_prediction_function_result = -np.float64(population_prediction.numpy()[0][0])
     gradient_function_result = -np.float64(gradient.numpy()[0])
     if with_penalty:
-        population_prediction_function_result =population_prediction_function_result+penalty(latent_variables, found_minima, penalty_scaling=penalty_scaling)
-        gradient_function_result =gradient_function_result+penalty(latent_variables, found_minima, penalty_scaling=penalty_scaling)
+        penalty_value, penalty_gradient = penalty(np.float64(latent_variables), found_minima, penalty_scaling=penalty_scaling)
+        population_prediction_function_result =population_prediction_function_result+penalty_value
+        gradient_function_result =gradient_function_result+penalty_gradient
         
         
     return population_prediction_function_result, gradient_function_result
 
-def penalty(x, found_minima, penalty_factor=1, penalty_scaling=5):
+def penalty(x, found_minima, penalty_factor=1, penalty_scaling=1):
     penalty_value = 0
+    penalty_gradient = 0
     for minimum in found_minima:
-        distance = np.linalg.norm(x - np.array(minimum))
-
-        penalty_value += min(1, penalty_factor / distance**2 * np.exp(-penalty_scaling*distance))
+        distance = abs(np.linalg.norm(x - np.array(minimum)))
+        
+        # print(distance)
+        # print(np.exp(-penalty_scaling*distance))
+        # print(penalty_factor / distance**2 )
+        if distance > 0:
+            penalty_value += penalty_factor * np.exp(-penalty_scaling*distance)
+            penalty_gradient += - penalty_factor * np.exp(-penalty_scaling*distance) * penalty_scaling * (x - np.array(minimum)) / distance
+        else:
+            penalty_value = penalty_factor
+            penalty_gradient = - x * 1e-1
         # penalty_scaling controls the strength of the penalty
-    return penalty_value
+    return penalty_value, penalty_gradient
 
 def find_minima(latent_dim, cfwg, vae, num_minima, penalty_scaling, stochasticity=1, initial_points_starter = [], min_value=-20, max_value=+20):
     # Define the bounds of your latent space
@@ -79,9 +88,14 @@ def find_minima(latent_dim, cfwg, vae, num_minima, penalty_scaling, stochasticit
     for initial_point in initial_points:
         # add gpt penalty code
         result = minimize(cfwg, initial_point, method='L-BFGS-B', jac=True, bounds=bounds, args=(vae, True, minima,penalty_scaling))
-        minima.append(result.x)
         
-        print(cfwg(result.x, vae, True, minima,penalty_scaling))
+        
+        # print(result.x)
+        # print(cfwg(initial_point, vae, True, minima,penalty_scaling))
+        # print(cfwg(result.x, vae, True, minima,penalty_scaling))
+        # print()
+        
+        minima.append(result.x)
         
     return minima
 
@@ -118,15 +132,11 @@ if __name__ == '__main__':
     # vae.encoder.summary()
     # vae.decoder.summary()    
 
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-1, 1, .15)
-    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
-
-    vae.vae_model.compile(optimizer)
     #vae.vae_model.summary()
 
     indices = np.where(population_train < 0.1)
-    low_population_train = population_train[indices]
-    low_reconstruction_train = reconstruction_train[indices]
+    low_population_train = np.array(population_train[indices])
+    low_reconstruction_train = np.array(reconstruction_train[indices])
     # Generate random indices
     random_indices = np.random.choice(len(low_population_train), size=128, replace=False)
 
@@ -144,18 +154,33 @@ if __name__ == '__main__':
     
     vae.vae_model.load_weights("VAEGO_no_population.h5")
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
+    vae.vae_model.get_layer('vae_loss_layer').reg = 0
     vae.vae_model.get_layer('vae_loss_layer').beta = 0
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
     vae.set_trainable_layers(['population_predictor_network'])
     
+    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 5, .5)
+    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
+    
+    
     vae.vae_model.compile(optimizer)
     vae.vae_model.fit(x=[low_reconstruction_train, low_population_train],
             y=low_reconstruction_train,
-            sample_weight=np.clip(1/(1-np.array(low_population_train))**10, 1, 25),
+            sample_weight=1/(1-np.array(low_population_train))**10,
             validation_data=validation_generator,
             steps_per_epoch=1,
+            batch_size=batch_size,
             epochs=16,
             use_multiprocessing=False)
+    
+    # vae.vae_model.compile(optimizer)
+    # vae.vae_model.fit(x=[low_reconstruction_train, low_population_train],
+    #         y=low_reconstruction_train,
+    #         sample_weight=np.clip(1/(1-np.array(low_population_train))**10, 1, 25),
+    #         validation_data=validation_generator,
+    #         batch_size=64,
+    #         epochs=6,
+    #         use_multiprocessing=False)
     
         
     reconstruction_list = []
@@ -166,23 +191,26 @@ if __name__ == '__main__':
         
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
     vae.vae_model.get_layer('vae_loss_layer').alpha = 1
-    #vae.vae_model.get_layer('vae_loss_layer').reg = 0
     vae.vae_model.set_trainable = True
     
     #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-3, 2, .99)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=1e-4)
+    # lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-3, batch_size, 1e-4)
+    # optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
     vae.vae_model.compile(optimizer)
     
     initial_points_starter_list = []
     
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
+    
 
-    for i in range (100):
+
+    for i in range (30):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
-                             initial_points_starter=initial_points_starter_list, penalty_scaling=min(5+i/5, 8), stochasticity=10)
+                             initial_points_starter=initial_points_starter_list, penalty_scaling=min(4+i/5, 20), stochasticity=5)
 
         decoded_latent = [decode_latent_space(np.array(m), vae) for m in minima]
         [reconstruction_list.append(j) for j in decoded_latent]
@@ -191,23 +219,16 @@ if __name__ == '__main__':
         
         vae.vae_model.fit(x=[np.array(reconstruction_list), np.array(population_list)],
                 y=np.array(reconstruction_list),
-                #sample_weight=np.clip(1/(1-abs(np.array(population_list)))**10, 1, 25),
-                batch_size=len(population_list),
-                steps_per_epoch=1,
-                epochs=1,
-                verbose=0)
+                sample_weight=np.clip(1/(1-abs(np.array(population_list)))**10, 1, 25),
+                batch_size=64,
+                epochs=1)
         
         if i % 5 == 0:
             print("Iteration {}".format(i))
             print("Largest Population so far: {:.4f}\n".format(max(population_list)))
         
-        # Plotting cost_function(m, vae)
-        plot_c_list = []
-        for m_value, label in zip(minima, range(len(minima))):
-            plot_c_list.append(np.abs(population_prediction_function(m_value, vae)))
         axes[0].clear()
-        axes[0].plot(plot_c_list, label='predicted')
-        axes[0].plot(list(population_list[-len(minima):]), label='measured')
+        axes[0].plot(list(population_list[-len(minima):]))
         axes[0].legend()
         axes[0].set_title('Population Function')
 
@@ -261,7 +282,7 @@ if __name__ == '__main__':
     plt.show()
     
     index = np.argmax(population_list)
-    print(max(population_list))
+    print("Largest Population: {:.5f}".format(max(population_list)))
     plt.plot(reconstruction_list[index])
     plt.show()
 

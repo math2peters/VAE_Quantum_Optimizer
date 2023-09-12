@@ -10,24 +10,12 @@ from keras.callbacks import Callback
 from tensorflow.nn import gelu
 import tensorflow as tf
 
+def sigmoid_squared(x):
+    sigmoid = tf.math.sigmoid(x)
+    return tf.math.square(sigmoid)
 
-def reflection_padding_1d(padding):
-    """
-    Apply reflection padding to a 1D input tensor.
 
-    Args:
-        padding: Integer or tuple of 2 integers, specifying the amount of padding along the width dimension.
-                 If a single integer is provided, it specifies the same padding value for both sides.
 
-    Returns:
-        A Keras Lambda layer that applies reflection padding to the input tensor.
-    """
-
-    def pad_func(x):
-        paddings = tf.constant([[0, 0], [padding, padding], [0, 0]])
-        return tf.pad(x, paddings, mode='REFLECT')
-
-    return Lambda(pad_func)
 
 
 class VAE:
@@ -74,15 +62,15 @@ class VAE:
     def create_population_predictor_network(self):
         inputs = Input(shape=(self.latent_dim,))
         y_loss = Dense(128, activation=gelu, name='population_predictor_dense1')(inputs)
-        y_loss = Dropout(.3)(y_loss)
+        y_loss = Dropout(.25)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(64, activation=gelu, name='population_predictor_dense2')(y_loss)
-        y_loss = Dropout(.3)(y_loss)
+        y_loss = Dropout(.25)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(32, activation=gelu, name='population_predictor_dense3')(y_loss)
-        y_loss = Dropout(.3)(y_loss)
+        y_loss = Dropout(.25)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(1, activation='sigmoid', name='population_predictor_activation')(y_loss)
+        y_loss = Dense(1, activation=sigmoid_squared, name='population_predictor_activation')(y_loss)
         
         return  Model(inputs, y_loss, name='population_predictor_network')
     
@@ -142,7 +130,7 @@ class VAELossLayer(layers.Layer):
         population_predictor = y_pred[1]
         reconstruction_loss = tf.reduce_mean(tf.square(reconstruction_true - reconstruction), axis=[1, 2]) 
         kl_loss = -0.5 * tf.reduce_sum(1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var), axis=1) 
-        population_predictor_loss = tf.square(population_predictor_true - population_predictor) * self.gamma 
+        population_predictor_loss = tf.sqrt(tf.abs(population_predictor_true - population_predictor)) * self.gamma 
         
         # Calculate the L2 regularization term
 
