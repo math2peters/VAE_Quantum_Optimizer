@@ -76,7 +76,7 @@ if __name__ == '__main__':
     
     if not use_saved:
         print(np.array(shared_data_list).shape)
-        with open('data_v3.pkl', 'wb') as file:
+        with open('data_v0.pkl', 'wb') as file:
             pickle.dump(list(shared_data_list), file)
 
     plt.figure(figsize=(12, 8))

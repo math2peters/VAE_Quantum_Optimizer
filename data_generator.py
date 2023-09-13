@@ -39,7 +39,7 @@ def linear(t, m, C):
 
 
 class VAEDataGeneratorKeras(Sequence):
-    def __init__(self, array_size, num_samples, batch_size, shared_data_list=None, save_data=False):
+    def __init__(self, array_size, num_samples, batch_size, shared_data_list=None, save_data=False, system='two_level'):
         """initialize the data generator
 
         """
@@ -57,6 +57,7 @@ class VAEDataGeneratorKeras(Sequence):
         self.population_list = []
         self.get_population_value = True
         self.save_data = save_data
+        self.system = system
     
 
 
@@ -209,26 +210,42 @@ class VAEDataGeneratorKeras(Sequence):
             
     def get_population(self, function_vals, return_full_values=False):
         # make a qutip hamiltonian and see how the function evolves the population in |1>
-
         # have to interpolate to make mesolve happy
         f = interpolate.interp1d(self.t_list*self.t_list_scale, function_vals*self.output_scale, fill_value="extrapolate")
         g = lambda t, args: f(t)
         
-        # two level hamiltonian. H1 is multipled by the function vals at each time step
-        H0 = -0.5 * 1 * qutip.operators.sigmaz()
-        H1 = qutip.operators.sigmax()
+        if self.system=='two_level':
+            
+            # two level hamiltonian. H1 is multipled by the function vals at each time step
+            H0 = -0.5 * 1 * qutip.operators.sigmaz()
+            H1 = qutip.operators.sigmax()
 
-        H = [H0, [H1, g]]
+            H = [H0, [H1, g]]
+            c_ops = [destroy(2)*np.sqrt(6)]
+            
+            psi0 = basis(2, 0)
+            proj = qutip.ket2dm(qutip.ket("1"))
+        
+        if self.system=='three_level':
+            # decay to a 3rd level removed from system dynamics
+            H0 = qutip.Qobj([[0, 0.0, 0.0], [0.0, 0, 0.0], [0.0, 0.0, 0]])
+            H1 = qutip.Qobj([[0, 1, 0.0], [1, 0, 0], [0.0, 0, 0]])
+            c_ops = [qutip.Qobj([[0, 0, 0.0], [0, 0, 0], [1.0, 0, 0]])*np.sqrt(16)]
 
-        psi0 = basis(2, 0)
-        proj1 = qutip.ket2dm(qutip.ket("1"))
+            H = [H0, [H1, g]]
+
+            psi0 = basis(3, 0)
+            proj = qutip.ket2dm(basis(3, 1))
+
+
+        
         # solve the hamiltonian for the times given in t_list, there is a collapse operator that causes damping from |1> to |0>
         try:
             options = Options()
             options.num_cpus = 8
             options.atol = 1e-10
             options.nsteps = 10000
-            result = mesolve(H, psi0,self.t_list,[destroy(2)*np.sqrt(6)], e_ops=[proj1], options=options) 
+            result = mesolve(H, psi0,self.t_list,c_ops, e_ops=[proj], options=options) 
         except Exception as e:
             error_message = f"An error occurred during the mesolve operation: {str(e)}"
             print(error_message)
@@ -238,6 +255,7 @@ class VAEDataGeneratorKeras(Sequence):
             return result.expect[0][-1]
         else:
             return result
+        
         
 
     def on_epoch_end(self):

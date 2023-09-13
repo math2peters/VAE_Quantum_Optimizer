@@ -10,13 +10,11 @@ from keras.callbacks import Callback
 from tensorflow.nn import gelu
 import tensorflow as tf
 
-def sigmoid_squared(x):
-    sigmoid = tf.math.sigmoid(x)
-    return tf.math.square(sigmoid)
-
-
-
-
+@tf.function
+def predictor_activation(x):
+    return tf.where(x < 0, 
+                    tf.math.exp(x), 
+                    x + 1)/4
 
 class VAE:
     def __init__(self, input_size, latent_dim, beta=0):
@@ -62,15 +60,17 @@ class VAE:
     def create_population_predictor_network(self):
         inputs = Input(shape=(self.latent_dim,))
         y_loss = Dense(128, activation=gelu, name='population_predictor_dense1')(inputs)
-        y_loss = Dropout(.25)(y_loss)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(64, activation=gelu, name='population_predictor_dense2')(y_loss)
-        y_loss = Dropout(.25)(y_loss)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(32, activation=gelu, name='population_predictor_dense3')(y_loss)
-        y_loss = Dropout(.25)(y_loss)
+        y_loss = Dense(64, activation=gelu, name='population_predictor_dense3')(y_loss)
+        y_loss = Dropout(.2)(y_loss)
+        y_loss = Dense(64, activation=gelu, name='population_predictor_dense4')(y_loss)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(1, activation=sigmoid_squared, name='population_predictor_activation')(y_loss)
+        y_loss = Dense(1, activation=predictor_activation, name='population_predictor_activation')(y_loss)
         
         return  Model(inputs, y_loss, name='population_predictor_network')
     
@@ -121,7 +121,7 @@ class VAELossLayer(layers.Layer):
         self.beta = self.add_weight(name='beta', shape=(), initializer=tf.keras.initializers.Constant(beta), trainable=False)
         self.alpha = self.add_weight(name='alpha', shape=(), initializer=tf.keras.initializers.Constant(1), trainable=False)
         self.gamma = self.add_weight(name='gamma', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
-        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
+        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(3e-5), trainable=False)
 
     def call(self, inputs):
         reconstruction_true, population_predictor_true, y_pred, z_mean, z_log_var, population_predictor_network = inputs
@@ -130,12 +130,12 @@ class VAELossLayer(layers.Layer):
         population_predictor = y_pred[1]
         reconstruction_loss = tf.reduce_mean(tf.square(reconstruction_true - reconstruction), axis=[1, 2]) 
         kl_loss = -0.5 * tf.reduce_sum(1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var), axis=1) 
-        population_predictor_loss = tf.sqrt(tf.abs(population_predictor_true - population_predictor)) * self.gamma 
+        population_predictor_loss = tf.abs(population_predictor_true - population_predictor) * self.gamma 
         
         # Calculate the L2 regularization term
 
         l2_loss = 0
-        for layer_name in ['population_predictor_dense1', 'population_predictor_dense2', 'population_predictor_dense3']:
+        for layer_name in ['population_predictor_dense1', 'population_predictor_dense2', 'population_predictor_dense3', 'population_predictor_dense4']:
             layer = population_predictor_network.get_layer(name=layer_name)
             weights = layer.kernel  # Get the kernel weights
             l2_loss += self.reg * tf.reduce_sum(tf.square(weights))
