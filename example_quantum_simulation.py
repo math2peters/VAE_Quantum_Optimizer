@@ -8,8 +8,7 @@ if __name__ == '__main__':
     generator = VAEDataGeneratorKeras(array_size=64, num_samples=1, batch_size=1, system='three_level')
     
     x, p = generator.generate_data()
-    x = np.zeros(64)
-    x[-6:] = 1
+    x = x[0]
     p_full = generator.get_population(x, return_full_values=True).expect
     t = np.linspace(0, generator.max_time, len(x))
     

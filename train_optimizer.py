@@ -167,11 +167,11 @@ if __name__ == '__main__':
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
     vae.vae_model.get_layer('vae_loss_layer').beta = 0
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
-    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-4
+    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-5
     vae.set_trainable_layers(['population_predictor_network'])
 
     
-    #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-3, 10, .95)
+    #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 5, .3)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=1e-4)
     
     
@@ -182,12 +182,13 @@ if __name__ == '__main__':
             #validation_data=validation_generator,
             steps_per_epoch=1,
             batch_size=batch_size,
-            epochs=1000)
+            epochs=1000,
+            use_multiprocessing=False)
     
     print("Max fed population is {:.4f}".format(max(low_population_train)))
     print("Avg fed population is {:.4f}".format(np.mean(low_population_train)))
-    for i in range(14):
-         print("Number of samples with populations > {:.2f}: {:.7f}".format(i/20, len(np.where(population_train > i/20)[0])/len(population_train)))
+    for i in range(5):
+         print("Number of samples with populations > {:.3f}: {:.7f}".format(i/200, len(np.where(low_population_train > i/200)[0])/len(population_train)))
     
         
     reconstruction_list = []
@@ -201,7 +202,7 @@ if __name__ == '__main__':
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
     vae.set_trainable_layers(['population_predictor_network'])
     
-    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=2e-4)
+    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=3e-4)
     vae.vae_model.compile(optimizer)
     
     initial_points_starter_list = []
@@ -209,7 +210,7 @@ if __name__ == '__main__':
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
     
-    for i in range (60):
+    for i in range (30):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
@@ -222,7 +223,7 @@ if __name__ == '__main__':
     
         vae.vae_model.fit(x=[np.array(reconstruction_list), np.array(population_list)],
                 y=np.array(reconstruction_list),
-                sample_weight = np.clip((np.where(np.array(population_list) >= 0.2, 1, 0)*np.array(population_list)/np.max(population_list))**10*10, 1, 10),
+                sample_weight = np.clip((np.where(np.array(population_list) >= 0.2, 1, 0)*np.array(population_list)/np.max(population_list))**4*25, 1, 25),
                 steps_per_epoch=1,
                 epochs=1)
         
