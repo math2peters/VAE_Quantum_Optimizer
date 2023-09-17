@@ -14,10 +14,20 @@ import tensorflow as tf
 def predictor_activation(x):
     return tf.where(x < 0, 
                     tf.math.exp(x), 
-                    x + 1)/4
+                    x)
 
 class VAE:
+    """
+    Variational auto-encoder architecture with an additional network interfaced with the latent space that predicts the outcome the experiment given the latent space as input
+    """
     def __init__(self, input_size, latent_dim, beta=0):
+        """init
+
+        Args:
+            input_size (int): input size of vae 
+            latent_dim (int): latent dimension size
+            beta (float, optional): beta value for vae. Defaults to 0.
+        """
         self.input_size = input_size
         self.latent_dim = latent_dim
         self.beta = beta
@@ -30,6 +40,7 @@ class VAE:
         self.vae_model = self.create_vae()
 
     def create_encoder(self):
+        # batch norm disabled because of worsened performance
         inputs = Input(shape=(self.input_size, 1))
         x = Conv1D(8, 5, activation=gelu)(inputs)
         #x = layers.BatchNormalization()(x)
@@ -59,17 +70,17 @@ class VAE:
     
     def create_population_predictor_network(self):
         inputs = Input(shape=(self.latent_dim,))
-        y_loss = Dense(128, activation=gelu, name='population_predictor_dense1')(inputs)
-        y_loss = Dropout(.2)(y_loss)
+        y_loss = Dense(64, activation=gelu, name='population_predictor_dense1')(inputs)
+        y_loss = Dropout(.1)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(64, activation=gelu, name='population_predictor_dense2')(y_loss)
-        y_loss = Dropout(.2)(y_loss)
+        y_loss = Dropout(.1)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(64, activation=gelu, name='population_predictor_dense3')(y_loss)
-        y_loss = Dropout(.2)(y_loss)
-        y_loss = Dense(64, activation=gelu, name='population_predictor_dense4')(y_loss)
-        y_loss = Dropout(.2)(y_loss)
+        y_loss = Dropout(.1)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
+        y_loss = Dense(64, activation=gelu, name='population_predictor_dense4')(y_loss)
+        y_loss = Dropout(.1)(y_loss)
         y_loss = Dense(1, activation=predictor_activation, name='population_predictor_activation')(y_loss)
         
         return  Model(inputs, y_loss, name='population_predictor_network')
@@ -110,18 +121,25 @@ class VAE:
 
 
 class Sampling(tf.keras.layers.Layer):
+    """
+    Sample latent space with a gaussian distribution"""
     def call(self, inputs):
         mean, log_var = inputs
         epsilon = tf.keras.backend.random_normal(shape=tf.keras.backend.shape(mean))
         return mean + tf.exp(0.5 * log_var) * epsilon
 
 class VAELossLayer(layers.Layer):
+    """Custom loss layer for VAE/predictor. Has regularization for the predictor network, and a beta scheduler for the VAE loss.
+
+    Args:
+        layers (_type_): _description_
+    """
     def __init__(self, beta, **kwargs):
         super(VAELossLayer, self).__init__(**kwargs)
         self.beta = self.add_weight(name='beta', shape=(), initializer=tf.keras.initializers.Constant(beta), trainable=False)
         self.alpha = self.add_weight(name='alpha', shape=(), initializer=tf.keras.initializers.Constant(1), trainable=False)
         self.gamma = self.add_weight(name='gamma', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
-        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(3e-5), trainable=False)
+        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(1e-4), trainable=False)
 
     def call(self, inputs):
         reconstruction_true, population_predictor_true, y_pred, z_mean, z_log_var, population_predictor_network = inputs

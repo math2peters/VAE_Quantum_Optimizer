@@ -12,7 +12,7 @@ from VAE_optimizer_architecture import VAE, BetaScheduler, PredictorScheduler
 np.random.seed(0)
 
 
-
+# Train the VAE before training the predictor
 if __name__ == '__main__':
     from multiprocessing import Manager
     
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     
 
     if use_saved:
-        with open('data_v3.pkl', 'rb') as file:
+        with open('VAE_data.pkl', 'rb') as file:
             # Use pickle.load() to load the data from the file
             pickle_data = pickle.load(file)
             print(pickle_data.shape)
@@ -36,7 +36,7 @@ if __name__ == '__main__':
         manager = Manager()
         shared_data_list = manager.list()
         # create generators that make artificial data and run them through the qutip hamiltonian
-        training_generator = VAEDataGeneratorKeras(array_size=input_size, num_samples=total_train_samples, batch_size=batch_size, shared_data_list=shared_data_list)#, load_pickled="test_data_v0.pkl")
+        training_generator = VAEDataGeneratorKeras(array_size=input_size, num_samples=total_train_samples, batch_size=batch_size, shared_data_list=shared_data_list)
         training_generator.get_population_value = True
 
     validation_generator = VAEDataGeneratorKeras(array_size=input_size, num_samples=512, batch_size=batch_size)
