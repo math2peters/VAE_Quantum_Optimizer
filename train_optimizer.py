@@ -138,36 +138,40 @@ if __name__ == '__main__':
     # vae.encoder.summary()
     # vae.decoder.summary()    
     # vae.vae_model.summary()
-
-    indices = np.where(population_train >0)
-    low_population_train = np.array(population_train[indices])
-    low_reconstruction_train = np.array(reconstruction_train[indices])
-    # Generate random indices
-    random_indices = np.random.choice(len(low_population_train), size=128, replace=False)
-
-    # Select elements from both arrays using the same indices
-    low_population_train = low_population_train[random_indices]
-    low_reconstruction_train = low_reconstruction_train[random_indices]
     
-    # Calculate the mean and standard deviation
-    mean, variance = tf.nn.moments(low_population_train, axes=[0])
-    std = tf.sqrt(variance)
+    x_list = []
+    p_list = []
+    for i in range (128):
+        m = (np.random.random(latent_dim)-.5)*10
+        x = decode_latent_space(np.array(m), vae)
+        x_list.append(x)
+        p_list.append(validation_generator.get_population(x))
+    
+    p_list = np.array(p_list)
+    x_list = np.array(x_list)
 
+    # indices = np.where(population_train >0)
+    # low_population_train = np.array(population_train[indices])
+    # low_reconstruction_train = np.array(reconstruction_train[indices])
+    # # Generate random indices
+    # random_indices = np.random.choice(len(low_population_train), size=128, replace=False)
+
+    # # Select elements from both arrays using the same indices
+    # low_population_train = low_population_train[random_indices]
+    # low_reconstruction_train = low_reconstruction_train[random_indices]
     
-    print("Max fed population is {:.4f}".format(max(low_population_train)))
-    print("Avg fed population is {:.4f}".format(np.mean(low_population_train)))
-    for i in range(14):
-         print("Number of samples with populations > {:.2f}: {:.7f}".format(i/20, len(np.where(population_train > i/20)[0])/len(population_train)))
+    low_population_train = p_list
+    low_reconstruction_train = x_list
     
-    vae.vae_model.load_weights("VAEGO_no_population.h5", by_name=True, skip_mismatch=True)
+    vae.vae_model.load_weights("VAEGO_no_population.h5", by_name=True, skip_mismatch=True) # allows us to load the weights from the VAE even if we change the population predictor network
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
     vae.vae_model.get_layer('vae_loss_layer').beta = 0
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
-    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-5
+    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-4
     vae.set_trainable_layers(['population_predictor_network'])
 
     
-    #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 5, .3)
+    #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-3, 10, .95)
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=1e-4)
     
     
@@ -178,9 +182,12 @@ if __name__ == '__main__':
             #validation_data=validation_generator,
             steps_per_epoch=1,
             batch_size=batch_size,
-            epochs=1240,
-            use_multiprocessing=False)
+            epochs=1000)
     
+    print("Max fed population is {:.4f}".format(max(low_population_train)))
+    print("Avg fed population is {:.4f}".format(np.mean(low_population_train)))
+    for i in range(14):
+         print("Number of samples with populations > {:.2f}: {:.7f}".format(i/20, len(np.where(population_train > i/20)[0])/len(population_train)))
     
         
     reconstruction_list = []
@@ -191,10 +198,10 @@ if __name__ == '__main__':
         
     # train ONLY the predictor network first
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
-    vae.vae_model.get_layer('vae_loss_layer').alpha = 2
-    #vae.set_trainable_layers(['population_predictor_network'])
+    vae.vae_model.get_layer('vae_loss_layer').alpha = 0
+    vae.set_trainable_layers(['population_predictor_network'])
     
-    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=3e-4)
+    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=2e-4)
     vae.vae_model.compile(optimizer)
     
     initial_points_starter_list = []
@@ -202,7 +209,7 @@ if __name__ == '__main__':
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
     
-    for i in range (50):
+    for i in range (60):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
@@ -279,11 +286,18 @@ if __name__ == '__main__':
     
     
     plt.plot(population_list)
+    plt.xlabel("Run Number")
+    plt.ylabel("Population")
+    plt.title("Population vs. Run Number")
     plt.tight_layout()
     plt.show()
     
     index = np.argmax(population_list)
     print("Largest Population: {:.5f}".format(max(population_list)))
+    
+    plt.xlabel("Time (arb.)")
+    plt.ylabel("Drive Amplitude (Arb.)")
+    plt.title("Best Run")
     plt.plot(reconstruction_list[index])
     plt.show()
 
