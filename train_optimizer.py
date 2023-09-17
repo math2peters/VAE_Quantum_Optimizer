@@ -10,7 +10,7 @@ from VAE_optimizer_architecture import VAE, Sampling
 from scipy.optimize import minimize
 
 
-np.random.seed(1)
+np.random.seed(0)
 
 def decode_latent_space(latent_variables, vae):
     """Go from latent space to reconstruction
@@ -83,7 +83,7 @@ def penalty(x, found_minima, penalty_factor=1, penalty_scaling=1):
             penalty_gradient += - penalty_factor * np.exp(-penalty_scaling*distance) * penalty_scaling * (x - np.array(minimum)) / distance
         else:
             penalty_value = penalty_factor
-            penalty_gradient = - x * 1e-1 # displace it a little bit from local minima towards origin
+            penalty_gradient = - x * 1e-1 # displace it a little bit from local minima
         # penalty_scaling controls the strength of the penalty
     return penalty_value, penalty_gradient
 
@@ -148,6 +148,10 @@ if __name__ == '__main__':
     # Select elements from both arrays using the same indices
     low_population_train = low_population_train[random_indices]
     low_reconstruction_train = low_reconstruction_train[random_indices]
+    
+    # Calculate the mean and standard deviation
+    mean, variance = tf.nn.moments(low_population_train, axes=[0])
+    std = tf.sqrt(variance)
 
     
     print("Max fed population is {:.4f}".format(max(low_population_train)))
@@ -155,25 +159,26 @@ if __name__ == '__main__':
     for i in range(14):
          print("Number of samples with populations > {:.2f}: {:.7f}".format(i/20, len(np.where(population_train > i/20)[0])/len(population_train)))
     
-    vae.vae_model.load_weights("VAEGO_no_population.h5")
+    vae.vae_model.load_weights("VAEGO_no_population.h5", by_name=True, skip_mismatch=True)
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
     vae.vae_model.get_layer('vae_loss_layer').beta = 0
     vae.vae_model.get_layer('vae_loss_layer').alpha = 0
-    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-4
+    vae.vae_model.get_layer('vae_loss_layer').reg = 1e-5
     vae.set_trainable_layers(['population_predictor_network'])
+
     
-    lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 5, .7)
-    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=lr_decay)
+    #lr_decay = keras.optimizers.schedules.ExponentialDecay(1e-2, 5, .3)
+    optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=1e-4)
     
     
     vae.vae_model.compile(optimizer)
     
     vae.vae_model.fit(x=[low_reconstruction_train, low_population_train],
             y=low_reconstruction_train,
-            validation_data=validation_generator,
+            #validation_data=validation_generator,
             steps_per_epoch=1,
             batch_size=batch_size,
-            epochs=10,
+            epochs=1240,
             use_multiprocessing=False)
     
     
@@ -186,8 +191,8 @@ if __name__ == '__main__':
         
     # train ONLY the predictor network first
     vae.vae_model.get_layer('vae_loss_layer').gamma = 1
-    vae.vae_model.get_layer('vae_loss_layer').alpha = 0
-    vae.set_trainable_layers(['population_predictor_network'])
+    vae.vae_model.get_layer('vae_loss_layer').alpha = 2
+    #vae.set_trainable_layers(['population_predictor_network'])
     
     optimizer = keras.optimizers.legacy.Adam(amsgrad=True, learning_rate=3e-4)
     vae.vae_model.compile(optimizer)
@@ -197,11 +202,11 @@ if __name__ == '__main__':
     plt.ion()  # Turn on interactive mode
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
     
-    for i in range (25):
+    for i in range (50):
         largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
         minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
-                             initial_points_starter=initial_points_starter_list, penalty_scaling=min(1+i/2, 10), stochasticity=10)
+                             initial_points_starter=initial_points_starter_list, penalty_scaling=min(5+i/3, 10), stochasticity=10)
 
         decoded_latent = [decode_latent_space(np.array(m), vae) for m in minima]
         [reconstruction_list.append(j) for j in decoded_latent]
@@ -210,8 +215,8 @@ if __name__ == '__main__':
     
         vae.vae_model.fit(x=[np.array(reconstruction_list), np.array(population_list)],
                 y=np.array(reconstruction_list),
-                sample_weight = np.clip((np.where(np.array(population_list) >= 0.2, 1, 0)*np.array(population_list)/np.max(population_list))**2*10, 1, 10),
-                batch_size=len(population_list),
+                sample_weight = np.clip((np.where(np.array(population_list) >= 0.2, 1, 0)*np.array(population_list)/np.max(population_list))**10*10, 1, 10),
+                steps_per_epoch=1,
                 epochs=1)
         
         if i % 5 == 0:

@@ -25,4 +25,4 @@
     - gelu activations are used to have smoother gradients, regularization/dropout are applied to prevent overfitting to the small dataset
     - Since the data is sparse (most data points will perform poorly) and the we care more about the points that produce high |1> populations, sample weighting is applied to weight higher in training values that produce larger populations
     
-todo: plots, activation function, trained population, how fast it get to good predictions
+todo: plots, activation function, trained population, how fast it get to good predictions, extensions to multiple variables, update gammas and plots etc, tradeoff between exploration and exploitation
