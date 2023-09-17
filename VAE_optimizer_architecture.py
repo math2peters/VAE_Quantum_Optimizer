@@ -14,7 +14,7 @@ import tensorflow as tf
 def predictor_activation(x):
     return tf.where(x < 0, 
                     tf.math.exp(x), 
-                    x)
+                    x + 1)
 
 class VAE:
     """
@@ -70,17 +70,17 @@ class VAE:
     
     def create_population_predictor_network(self):
         inputs = Input(shape=(self.latent_dim,))
-        y_loss = Dense(64, activation=gelu, name='population_predictor_dense1')(inputs)
-        y_loss = Dropout(.1)(y_loss)
+        y_loss = Dense(128, activation=gelu, name='population_predictor_dense1')(inputs)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
         y_loss = Dense(64, activation=gelu, name='population_predictor_dense2')(y_loss)
-        y_loss = Dropout(.1)(y_loss)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(64, activation=gelu, name='population_predictor_dense3')(y_loss)
-        y_loss = Dropout(.1)(y_loss)
+        y_loss = Dense(32, activation=gelu, name='population_predictor_dense3')(y_loss)
+        y_loss = Dropout(.2)(y_loss)
+        y_loss = Dense(16, activation=gelu, name='population_predictor_dense4')(y_loss)
+        y_loss = Dropout(.2)(y_loss)
         #y_loss = layers.BatchNormalization()(y_loss)
-        y_loss = Dense(64, activation=gelu, name='population_predictor_dense4')(y_loss)
-        y_loss = Dropout(.1)(y_loss)
         y_loss = Dense(1, activation=predictor_activation, name='population_predictor_activation')(y_loss)
         
         return  Model(inputs, y_loss, name='population_predictor_network')
@@ -139,7 +139,7 @@ class VAELossLayer(layers.Layer):
         self.beta = self.add_weight(name='beta', shape=(), initializer=tf.keras.initializers.Constant(beta), trainable=False)
         self.alpha = self.add_weight(name='alpha', shape=(), initializer=tf.keras.initializers.Constant(1), trainable=False)
         self.gamma = self.add_weight(name='gamma', shape=(), initializer=tf.keras.initializers.Constant(0), trainable=False)
-        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(1e-4), trainable=False)
+        self.reg = self.add_weight(name='reg', shape=(), initializer=tf.keras.initializers.Constant(3e-5), trainable=False)
 
     def call(self, inputs):
         reconstruction_true, population_predictor_true, y_pred, z_mean, z_log_var, population_predictor_network = inputs

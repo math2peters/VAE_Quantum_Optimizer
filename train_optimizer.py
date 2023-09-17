@@ -10,7 +10,7 @@ from VAE_optimizer_architecture import VAE, Sampling
 from scipy.optimize import minimize
 
 
-np.random.seed(0)
+np.random.seed(1)
 
 def decode_latent_space(latent_variables, vae):
     """Go from latent space to reconstruction
@@ -198,9 +198,9 @@ if __name__ == '__main__':
     fig, axes = plt.subplots(4, 1, figsize=(12, 10))  # Create 4 subplots
     
     for i in range (25):
-        largest_population_indices = np.argsort(np.array(population_list))[-3:]
+        largest_population_indices = np.argsort(np.array(population_list))[-4:]
         initial_points_starter_list = np.array(encode_latent_space(np.array(reconstruction_list)[largest_population_indices], vae))
-        minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=6, 
+        minima = find_minima(latent_dim, population_prediction_function_with_gradient, vae, num_minima=8, 
                              initial_points_starter=initial_points_starter_list, penalty_scaling=min(1+i/2, 10), stochasticity=10)
 
         decoded_latent = [decode_latent_space(np.array(m), vae) for m in minima]
