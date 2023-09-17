@@ -39,4 +39,4 @@ Notably, there is a huge jump in the population at the first guessed point, whic
 # TODO
 - Extend to multiple variables
 - Scale the population inputs for training data into the predictor network
-- Improve predictor network fitting fidelity. It seems to sometimes divide points into either good or bad by putting their predicted value near 0 or at some other value, with small variations in between
+- Improve predictor network fitting fidelity. It seems to sometimes divide points into either good or bad by putting their predicted value near 0 or at some other value, with small variations in between good or bad values.
